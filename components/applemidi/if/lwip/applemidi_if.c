@@ -274,6 +274,7 @@ static int cmd_info(int argc, char **argv)
 
 
 static struct {
+  struct arg_str *on_off;
   struct arg_int *verbosity;
   struct arg_end *end;
 } applemidi_if_debug_args;
@@ -286,13 +287,16 @@ static int cmd_debug(int argc, char **argv)
       return 1;
   }
 
-  if( applemidi_if_debug_args.verbosity->count == 0) {
-    printf("Disabled debug messages - they can be re-enabled with applemidi_debug --verbosity=2 (or lower/higher)\n");
-    printf("Recommended: applemidi_debug --verbosity=1 (will only print most important messages, such as warnings/errors & connections details)\n");
-    applemidi_set_debug_level(0);
+  if( strcasecmp(applemidi_if_debug_args.on_off->sval[0], "on") == 0 ) {
+    uint8_t verbosity = 2;
+    if( applemidi_if_debug_args.verbosity->count > 0) {
+      verbosity = applemidi_if_debug_args.verbosity->ival[0];
+    }
+    printf("Enabled debug messages with verbosity=%d\n", verbosity);
+    applemidi_set_debug_level(verbosity);
   } else {
-    printf("Enabled debug messages with verbosity=%d\n", applemidi_if_debug_args.verbosity->ival[0]);
-    applemidi_set_debug_level(applemidi_if_debug_args.verbosity->ival[0]);
+    printf("Disabled debug messages - they can be re-enabled with 'applemidi_debug on'\n");
+    applemidi_set_debug_level(1);
   }
 
   return 0; // no error
@@ -404,6 +408,7 @@ void applemidi_if_register_console_commands(void)
   }
 
   {
+    applemidi_if_debug_args.on_off = arg_str1(NULL, NULL, "<on/off>", "Enables/Disables debug messages");
     applemidi_if_debug_args.verbosity = arg_int0(NULL, "verbosity", "<level>", "Verbosity Level (0..3)");
     applemidi_if_debug_args.end = arg_end(20);
 

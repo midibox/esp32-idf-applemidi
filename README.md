@@ -38,8 +38,8 @@ should take place immediately.
   * use "applemidi_info" to display some details about the connections.
     Up to 4 independent connections are supported
     
-  * use "applemidi_debug --verbosity=<0..3> to change the verbosity level.
-    note that higher verbosity might result into packet lost since the UART delays processing!
+  * use "applemidi_debug on" to send more debug messages.
+    Note that higher verbosity might result into packet lost since the printf() messages delay processing!
     
   * use "applemidi_start_session &lt;ip&gt;" to initiate an own session.
     A different port can be specified with --port=<port>, 5004 is used by default. 
