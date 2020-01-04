@@ -357,8 +357,24 @@ static int32_t applemidi_outbuffer_push(uint8_t applemidi_port, uint8_t *stream,
 
   // if len >= buffer size, it makes sense to send out immediately
   if( len >= (APPLEMIDI_OUTBUFFER_SIZE-max_header_size) ) {
+    // this is very unlikely, since applemidi_send_message() maintains the size
+    // but just in case of future extensions, we prepare dynamic memory allocation for "big packets"
     applemidi_outbuffer_flush(applemidi_port);
-    applemidi_send_udp_datagram(peer, peer->ip_addr, peer->data_port, (uint8_t *)peer->outbuffer, peer->outbuffer_len);
+    {
+      size_t packet_len = max_header_size + len;
+      uint32_t *packet = malloc(packet_len);
+      if( packet == NULL ) {
+        return -1; // couldn't create temporary packet
+      } else {
+        packet[0] = htonl(0x80610000 | applemidi_peer[0].seq_nr++);
+        packet[1] = htonl(get_timestamp_100us());
+        packet[2] = htonl(applemidi_peer[0].ssrc);
+        packet[3] = (0x80 | (len >> 8)) | ((len & 0xff) << 8);
+        memcpy((uint8_t *)packet + max_header_size, stream, len);
+        applemidi_send_udp_datagram(peer, peer->ip_addr, peer->data_port, (uint8_t *)packet, packet_len);
+        free(packet);
+      }
+    }
   } else {
     // flush buffer before adding new message
     if( (peer->outbuffer_len + len) >= (APPLEMIDI_OUTBUFFER_SIZE-max_header_size) )
@@ -413,24 +429,27 @@ int32_t applemidi_send_message(uint8_t applemidi_port, uint8_t *stream, size_t l
     applemidi_outbuffer_push(applemidi_port, stream, len);
   } else {
     // TODO: currently only supports SysEx
-#if 0
     // sending packets
+    size_t max_size = APPLEMIDI_OUTBUFFER_SIZE - max_header_size - 2; // -2 since we have to add F0/F7 at begin/end
+    uint8_t packet[APPLEMIDI_OUTBUFFER_SIZE]; // now it becomes stack hungry...
     int pos;
-    for(pos=0; pos<len; pos += (APPLEMIDI_OUTBUFFER_SIZE-max_header_size)) {
+    for(pos=0; pos<len; pos += max_size) {
       if( pos == 0 ) {
-        blemidi_outbuffer_push(blemidi_port, stream, (APPLEMIDI_OUTBUFFER_SIZE-max_header_size));
+        memcpy(&packet[0], stream, max_size);
+        packet[max_size] = 0xf0; // tail status octet
+        applemidi_outbuffer_push(applemidi_port, packet, max_size+1);
       } else {
-        uint8_t packet[APPLEMIDI_OUTBUFFER_SIZE]; // now it becomes stack hungry...
-        size_t packet_len = len-pos+1;
-        if( packet_len >= blemidi_mtu ) {
-          packet_len = blemidi_mtu + 1;
+        packet[0] = 0xf7; // continue stream
+        memcpy(&packet[1], &stream[pos], max_size);
+        size_t packet_len = max_size + 2;
+        if( (pos+max_size+1) >= len ) {
+          packet_len = len-pos+1;
+        } else {
+          packet[max_size+1] = 0xf0; // tail status octet
         }
-        packet[0] = blemidi_timestamp_high();
-        memcpy(&packet[1], &stream[pos], packet_len-1);
-        blemidi_outbuffer_push(blemidi_port, packet, packet_len);
+        applemidi_outbuffer_push(applemidi_port, packet, packet_len);
       }
     }
-#endif
   }
 
   return 0; // no error
